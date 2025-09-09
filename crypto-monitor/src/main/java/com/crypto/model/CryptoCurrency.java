@@ -1,14 +1,17 @@
-package com.crypto.model;
+package com.crypto.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
@@ -19,7 +22,7 @@ public class CryptoCurrency {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "coin_id", unique = true)
+    @Column(unique = true, nullable = false)
     @JsonProperty("id")
     private String coinId;
 
@@ -30,35 +33,23 @@ public class CryptoCurrency {
     private String name;
 
     @JsonProperty("current_price")
-    @Column(name = "current_price", precision = 20, scale = 8)
     private BigDecimal currentPrice;
 
+    // Alinhados com AlertService
     @JsonProperty("price_change_percentage_1h_in_currency")
-    @Column(name = "price_change_1h")
-    private BigDecimal priceChange1h;
+    private Double priceChange1h;
 
-    @JsonProperty("price_change_percentage_24h_in_currency")
-    @Column(name = "price_change_24h")
-    private BigDecimal priceChange24h;
+    @JsonProperty("price_change_percentage_24h")
+    private Double priceChange24h;
 
     @JsonProperty("price_change_percentage_7d_in_currency")
-    @Column(name = "price_change_7d")
-    private BigDecimal priceChange7d;
+    private Double priceChange7d;
 
     @JsonProperty("market_cap")
-    @Column(name = "market_cap")
-    private Long marketCap;
+    private BigDecimal marketCap;
 
     @JsonProperty("total_volume")
-    @Column(name = "total_volume")
-    private Long totalVolume;
+    private BigDecimal totalVolume;
 
-    @Column(name = "last_updated")
-    private LocalDateTime lastUpdated;
-
-    @PrePersist
-    @PreUpdate
-    public void updateTimestamp() {
-        this.lastUpdated = LocalDateTime.now();
-    }
+    private LocalDateTime lastUpdated = LocalDateTime.now();
 }

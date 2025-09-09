@@ -1,7 +1,7 @@
 package com.crypto.service;
 
 import com.crypto.model.AlertRule;
-import com.crypto.model.CryptoCurrency;
+import com.crypto.dto.CryptoCurrency;
 import com.crypto.model.dto.NotificationMessage;
 import com.crypto.repository.AlertRuleRepository;
 import lombok.RequiredArgsConstructor;
@@ -137,7 +137,7 @@ public class AlertService {
      */
     private void checkCustomAlert(CryptoCurrency crypto, AlertRule rule) {
         try {
-            BigDecimal changeValue = getChangeValueByPeriod(crypto, rule.getTimePeriod());
+            BigDecimal changeValue = BigDecimal.valueOf(getChangeValueByPeriod(crypto, rule.getTimePeriod()));
 
             if (changeValue == null) {
                 return;
@@ -194,7 +194,7 @@ public class AlertService {
     /**
      * Obtém o valor de mudança baseado no período
      */
-    private BigDecimal getChangeValueByPeriod(CryptoCurrency crypto, AlertRule.TimePeriod period) {
+    private Double getChangeValueByPeriod(CryptoCurrency crypto, AlertRule.TimePeriod period) {
         switch (period) {
             case ONE_HOUR:
                 return crypto.getPriceChange1h();

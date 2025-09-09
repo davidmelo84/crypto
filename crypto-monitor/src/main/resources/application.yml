@@ -122,4 +122,4 @@ info:
   java:
     version: @java.version@
   build:
-    timestamp: @timestamp@
+    timestamp: ${TIMESTAMP}

@@ -1,7 +1,7 @@
 package com.crypto.controller;
 
 import com.crypto.model.AlertRule;
-import com.crypto.model.CryptoCurrency;
+import com.crypto.dto.CryptoCurrency;
 import com.crypto.model.dto.AlertRuleDTO;
 import com.crypto.service.AlertService;
 import com.crypto.service.CryptoService;

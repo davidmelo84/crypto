@@ -120,6 +120,6 @@ info:
     description: Sistema de Monitoramento de Criptomoedas
     version: 1.0.0
   java:
-    version: 24.0.2
+    version: 17.0.16
   build:
-    timestamp: @timestamp@
+    timestamp: ${TIMESTAMP}
