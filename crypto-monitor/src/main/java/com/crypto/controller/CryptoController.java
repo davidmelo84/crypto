@@ -1,26 +1,20 @@
+package com.crypto.controller;
+
 import com.crypto.model.AlertRule;
 import com.crypto.model.CryptoCurrency;
+import com.crypto.model.dto.AlertRuleDTO;
 import com.crypto.service.AlertService;
 import com.crypto.service.CryptoService;
 import com.crypto.service.NotificationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import com.crypto.model.AlertRule;
-import jakarta.validation.constraints.*;
-        import lombok.Data;
-import java.math.BigDecimal;
-
-// CryptoController.java
-package com.crypto.controller;
-
-
 
 @Slf4j
 @RestController
@@ -98,33 +92,30 @@ public class CryptoController {
     public ResponseEntity<Map<String, Object>> forceUpdate() {
         try {
             cryptoService.updateCryptoPricesScheduled();
-
             Map<String, Object> response = Map.of(
                     "status", "success",
                     "message", "Atualização iniciada com sucesso",
                     "timestamp", System.currentTimeMillis()
             );
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Erro ao forçar atualização: {}", e.getMessage());
-
             Map<String, Object> response = Map.of(
                     "status", "error",
                     "message", "Erro ao iniciar atualização: " + e.getMessage(),
                     "timestamp", System.currentTimeMillis()
             );
-
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 
     /**
-     * Cria nova regra de alerta
+     * Cria nova regra de alerta. Usa AlertRuleDTO para validação.
      */
     @PostMapping("/alerts")
-    public ResponseEntity<AlertRule> createAlertRule(@Valid @RequestBody AlertRule alertRule) {
+    public ResponseEntity<AlertRule> createAlertRule(@Valid @RequestBody AlertRuleDTO alertRuleDTO) {
         try {
+            AlertRule alertRule = alertRuleDTO.toEntity();
             AlertRule savedRule = alertService.createAlertRule(alertRule);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedRule);
         } catch (Exception e) {
@@ -154,21 +145,17 @@ public class CryptoController {
     public ResponseEntity<Map<String, String>> deactivateAlertRule(@PathVariable Long ruleId) {
         try {
             alertService.deactivateAlertRule(ruleId);
-
             Map<String, String> response = Map.of(
                     "status", "success",
                     "message", "Regra de alerta desativada com sucesso"
             );
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Erro ao desativar regra de alerta: {}", e.getMessage());
-
             Map<String, String> response = Map.of(
                     "status", "error",
                     "message", "Erro ao desativar regra de alerta: " + e.getMessage()
             );
-
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -180,21 +167,17 @@ public class CryptoController {
     public ResponseEntity<Map<String, String>> sendTestNotification() {
         try {
             notificationService.sendTestNotification();
-
             Map<String, String> response = Map.of(
                     "status", "success",
                     "message", "Notificação de teste enviada com sucesso"
             );
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Erro ao enviar notificação de teste: {}", e.getMessage());
-
             Map<String, String> response = Map.of(
                     "status", "error",
                     "message", "Erro ao enviar notificação de teste: " + e.getMessage()
             );
-
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -207,7 +190,6 @@ public class CryptoController {
         try {
             List<CryptoCurrency> savedCryptos = cryptoService.getAllSavedCryptos();
             List<AlertRule> activeRules = alertService.getActiveAlertRules();
-
             Map<String, Object> status = Map.of(
                     "status", "online",
                     "timestamp", System.currentTimeMillis(),
@@ -216,55 +198,15 @@ public class CryptoController {
                     "last_update", savedCryptos.isEmpty() ? null :
                             savedCryptos.get(0).getLastUpdated()
             );
-
             return ResponseEntity.ok(status);
         } catch (Exception e) {
             log.error("Erro ao obter status: {}", e.getMessage());
-
             Map<String, Object> status = Map.of(
                     "status", "error",
                     "message", e.getMessage(),
                     "timestamp", System.currentTimeMillis()
             );
-
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(status);
         }
-    }
-}
-
-// AlertRuleDTO.java (para melhor validação)
-package com.crypto.model.dto;
-
-
-@Data
-public class AlertRuleDTO {
-
-    @NotBlank(message = "Símbolo da moeda é obrigatório")
-    @Size(min = 2, max = 10, message = "Símbolo deve ter entre 2 e 10 caracteres")
-    private String coinSymbol;
-
-    @NotNull(message = "Tipo de alerta é obrigatório")
-    private AlertRule.AlertType alertType;
-
-    @NotNull(message = "Valor do limite é obrigatório")
-    @DecimalMin(value = "0.01", message = "Valor deve ser maior que 0.01")
-    @DecimalMax(value = "1000.0", message = "Valor deve ser menor que 1000")
-    private BigDecimal thresholdValue;
-
-    @NotNull(message = "Período de tempo é obrigatório")
-    private AlertRule.TimePeriod timePeriod;
-
-    @Email(message = "Email deve ter formato válido")
-    private String notificationEmail;
-
-    public AlertRule toEntity() {
-        AlertRule rule = new AlertRule();
-        rule.setCoinSymbol(this.coinSymbol.toUpperCase());
-        rule.setAlertType(this.alertType);
-        rule.setThresholdValue(this.thresholdValue);
-        rule.setTimePeriod(this.timePeriod);
-        rule.setNotificationEmail(this.notificationEmail);
-        rule.setIsActive(true);
-        return rule;
     }
 }

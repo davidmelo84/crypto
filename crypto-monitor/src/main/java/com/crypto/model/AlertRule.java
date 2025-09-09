@@ -1,11 +1,9 @@
-// AlertRule.java
-// Localização: src/main/java/com/crypto/model/AlertRule.java
 package com.crypto.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 import java.math.BigDecimal;
 
 @Data

@@ -1,10 +1,8 @@
-// NotificationMessage.java
-// Localização: src/main/java/com/crypto/model/dto/NotificationMessage.java
 package com.crypto.model.dto;
 
-import lombok.Data;
-import lombok.Builder;
 import com.crypto.model.AlertRule.AlertType;
+import lombok.Builder;
+import lombok.Data;
 
 @Data
 @Builder

@@ -1,3 +1,5 @@
+package com.crypto.service;
+
 import com.crypto.model.AlertRule;
 import com.crypto.model.CryptoCurrency;
 import com.crypto.model.dto.NotificationMessage;
@@ -9,15 +11,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.util.List;
-import com.crypto.model.AlertRule;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-import java.util.List;
-
-// AlertService.java
-package com.crypto.service;
-
-
 
 @Slf4j
 @Service
@@ -253,19 +246,4 @@ public class AlertService {
             alertRuleRepository.save(rule);
         });
     }
-}
-
-// AlertRuleRepository.java
-package com.crypto.repository;
-
-
-
-@Repository
-public interface AlertRuleRepository extends JpaRepository<AlertRule, Long> {
-
-    List<AlertRule> findByCoinSymbolAndIsActiveTrue(String coinSymbol);
-
-    List<AlertRule> findByIsActiveTrue();
-
-    List<AlertRule> findByNotificationEmail(String email);
 }

@@ -1,5 +1,3 @@
-// AlertRuleDTO.java
-// Localização: src/main/java/com/crypto/model/dto/AlertRuleDTO.java
 package com.crypto.model.dto;
 
 import com.crypto.model.AlertRule;
