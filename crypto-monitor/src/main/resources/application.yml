@@ -1,0 +1,125 @@
+# application.yml
+server:
+  port: 8080
+  servlet:
+    context-path: /crypto-monitor
+
+spring:
+  application:
+    name: crypto-monitor
+
+  # Configuração do banco de dados
+  datasource:
+    # H2 para desenvolvimento
+    url: jdbc:h2:mem:cryptodb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+    # PostgreSQL para produção (descomente quando necessário)
+    # url: jdbc:postgresql://localhost:5432/crypto_monitor
+    # driver-class-name: org.postgresql.Driver
+    # username: ${DB_USERNAME:crypto_user}
+    # password: ${DB_PASSWORD:crypto_password}
+
+  # Configuração JPA/Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        # dialect: org.hibernate.dialect.PostgreSQLDialect # Para PostgreSQL
+        format_sql: true
+    defer-datasource-initialization: true
+
+  # Console H2 (apenas desenvolvimento)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+  # Configuração de Email
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:seu-email@gmail.com}
+    password: ${MAIL_PASSWORD:sua-senha-de-app}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+# Configurações da aplicação
+crypto:
+  coins: bitcoin,ethereum,cardano,polkadot,chainlink,solana,avalanche-2,polygon,litecoin,bitcoin-cash
+
+# Configurações de alertas
+alert:
+  buy:
+    threshold: -5.0  # Alerta de compra quando cair 5% ou mais
+  sell:
+    threshold: 10.0  # Alerta de venda quando subir 10% ou mais
+
+# Configurações de notificação
+notification:
+  email:
+    enabled: true
+    from: ${MAIL_USERNAME:crypto-monitor@exemplo.com}
+    to: ${NOTIFICATION_EMAIL:seu-email@gmail.com}
+
+  telegram:
+    enabled: ${TELEGRAM_ENABLED:false}
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+
+# Configuração da API CoinGecko
+coingecko:
+  api:
+    url: https://api.coingecko.com/api/v3
+
+# Configuração de logs
+logging:
+  level:
+    com.crypto: INFO
+    org.springframework.web: DEBUG
+    org.springframework.mail: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/crypto-monitor.log
+
+# Configuração do Actuator (monitoramento)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+# Informações da aplicação
+info:
+  app:
+    name: Crypto Monitor
+    description: Sistema de Monitoramento de Criptomoedas
+    version: 1.0.0
+  java:
+    version: @java.version@
+  build:
+    timestamp: @timestamp@
