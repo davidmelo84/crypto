@@ -5,6 +5,7 @@ import com.crypto.dto.CryptoCurrency;
 import com.crypto.model.dto.AlertRuleDTO;
 import com.crypto.service.AlertService;
 import com.crypto.service.CryptoService;
+import com.crypto.service.CryptoMonitoringService;
 import com.crypto.service.NotificationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,10 +27,8 @@ public class CryptoController {
     private final CryptoService cryptoService;
     private final AlertService alertService;
     private final NotificationService notificationService;
+    private final CryptoMonitoringService monitoringService;
 
-    /**
-     * Busca cotações atuais de todas as criptomoedas monitoradas
-     */
     @GetMapping("/current")
     public ResponseEntity<List<CryptoCurrency>> getCurrentPrices() {
         try {
@@ -41,9 +40,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Busca cotação de uma criptomoeda específica
-     */
     @GetMapping("/current/{coinId}")
     public ResponseEntity<CryptoCurrency> getCryptoByCoinId(@PathVariable String coinId) {
         try {
@@ -56,9 +52,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Busca todas as criptomoedas salvas no banco
-     */
     @GetMapping("/saved")
     public ResponseEntity<List<CryptoCurrency>> getAllSavedCryptos() {
         try {
@@ -70,9 +63,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Busca criptomoeda salva por coinId
-     */
     @GetMapping("/saved/{coinId}")
     public ResponseEntity<CryptoCurrency> getSavedCryptoByCoinId(@PathVariable String coinId) {
         try {
@@ -85,13 +75,12 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Força atualização manual dos preços
-     */
     @PostMapping("/update")
     public ResponseEntity<Map<String, Object>> forceUpdate() {
         try {
-            cryptoService.updateCryptoPricesScheduled();
+            // Agora usa o serviço coordenador para atualização manual
+            monitoringService.forceUpdateAndProcessAlerts();
+
             Map<String, Object> response = Map.of(
                     "status", "success",
                     "message", "Atualização iniciada com sucesso",
@@ -109,9 +98,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Cria nova regra de alerta. Usa AlertRuleDTO para validação.
-     */
     @PostMapping("/alerts")
     public ResponseEntity<AlertRule> createAlertRule(@Valid @RequestBody AlertRuleDTO alertRuleDTO) {
         try {
@@ -124,9 +110,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Lista todas as regras de alerta ativas
-     */
     @GetMapping("/alerts")
     public ResponseEntity<List<AlertRule>> getActiveAlertRules() {
         try {
@@ -138,9 +121,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Desativa uma regra de alerta
-     */
     @DeleteMapping("/alerts/{ruleId}")
     public ResponseEntity<Map<String, String>> deactivateAlertRule(@PathVariable Long ruleId) {
         try {
@@ -160,9 +140,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Envia notificação de teste
-     */
     @PostMapping("/test-notification")
     public ResponseEntity<Map<String, String>> sendTestNotification() {
         try {
@@ -182,9 +159,6 @@ public class CryptoController {
         }
     }
 
-    /**
-     * Endpoint de status da aplicação
-     */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus() {
         try {
@@ -207,6 +181,28 @@ public class CryptoController {
                     "timestamp", System.currentTimeMillis()
             );
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(status);
+        }
+    }
+
+    /**
+     * Novo endpoint para processar alertas de uma criptomoeda específica
+     */
+    @PostMapping("/process-alerts/{coinId}")
+    public ResponseEntity<Map<String, String>> processAlertsForCrypto(@PathVariable String coinId) {
+        try {
+            monitoringService.processAlertsForCrypto(coinId);
+            Map<String, String> response = Map.of(
+                    "status", "success",
+                    "message", "Alertas processados para " + coinId
+            );
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Erro ao processar alertas para {}: {}", coinId, e.getMessage());
+            Map<String, String> response = Map.of(
+                    "status", "error",
+                    "message", "Erro ao processar alertas: " + e.getMessage()
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 }

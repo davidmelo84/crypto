@@ -6,14 +6,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -22,7 +20,6 @@ public class CryptoService {
 
     private final WebClient webClient;
     private final CryptoCurrencyRepository cryptoRepository;
-    private final AlertService alertService;
 
     @Value("${coingecko.api.url:https://api.coingecko.com/api/v3}")
     private String coinGeckoApiUrl;
@@ -31,7 +28,7 @@ public class CryptoService {
     private String coinsToMonitor;
 
     /**
-     * Busca cotações atuais das criptomoedas
+     * Busca preços atuais da API
      */
     public List<CryptoCurrency> getCurrentPrices() {
         try {
@@ -68,7 +65,7 @@ public class CryptoService {
     }
 
     /**
-     * Busca cotação de uma criptomoeda específica
+     * Busca uma criptomoeda específica por coinId
      */
     public Optional<CryptoCurrency> getCryptoByCoinId(String coinId) {
         try {
@@ -93,66 +90,31 @@ public class CryptoService {
     }
 
     /**
-     * Salva ou atualiza dados da criptomoeda no banco
+     * Salva ou atualiza uma criptomoeda no banco de dados
      */
     public CryptoCurrency saveCrypto(CryptoCurrency crypto) {
-        try {
-            Optional<CryptoCurrency> existing = cryptoRepository.findByCoinId(crypto.getCoinId());
-
-            if (existing.isPresent()) {
-                CryptoCurrency existingCrypto = existing.get();
-                existingCrypto.setCurrentPrice(crypto.getCurrentPrice());
-                existingCrypto.setPriceChange1h(crypto.getPriceChange1h());
-                existingCrypto.setPriceChange24h(crypto.getPriceChange24h());
-                existingCrypto.setPriceChange7d(crypto.getPriceChange7d());
-                existingCrypto.setMarketCap(crypto.getMarketCap());
-                existingCrypto.setTotalVolume(crypto.getTotalVolume());
-                return cryptoRepository.save(existingCrypto);
-            } else {
-                return cryptoRepository.save(crypto);
-            }
-        } catch (Exception e) {
-            log.error("Erro ao salvar crypto {}: {}", crypto.getSymbol(), e.getMessage());
-            throw new RuntimeException("Erro ao salvar dados da criptomoeda", e);
-        }
+        return cryptoRepository.findByCoinId(crypto.getCoinId())
+                .map(existing -> {
+                    existing.setCurrentPrice(crypto.getCurrentPrice());
+                    existing.setPriceChange1h(crypto.getPriceChange1h());
+                    existing.setPriceChange24h(crypto.getPriceChange24h());
+                    existing.setPriceChange7d(crypto.getPriceChange7d());
+                    existing.setMarketCap(crypto.getMarketCap());
+                    existing.setTotalVolume(crypto.getTotalVolume());
+                    return cryptoRepository.save(existing);
+                })
+                .orElseGet(() -> cryptoRepository.save(crypto));
     }
 
     /**
-     * Atualização automática a cada 5 minutos
-     */
-    @Scheduled(fixedRate = 300000) // 5 minutos
-    @Async
-    public CompletableFuture<Void> updateCryptoPricesScheduled() {
-        try {
-            log.info("Iniciando atualização automática de preços...");
-
-            List<CryptoCurrency> cryptos = getCurrentPrices();
-
-            for (CryptoCurrency crypto : cryptos) {
-                CryptoCurrency savedCrypto = saveCrypto(crypto);
-
-                // Verifica alertas para esta criptomoeda
-                alertService.checkAlertsForCrypto(savedCrypto);
-            }
-
-            log.info("Atualização automática concluída. {} moedas processadas", cryptos.size());
-
-        } catch (Exception e) {
-            log.error("Erro na atualização automática: {}", e.getMessage(), e);
-        }
-
-        return CompletableFuture.completedFuture(null);
-    }
-
-    /**
-     * Busca todas as criptomoedas salvas no banco
+     * Retorna todas as criptomoedas salvas no banco
      */
     public List<CryptoCurrency> getAllSavedCryptos() {
         return cryptoRepository.findAllByOrderByMarketCapDesc();
     }
 
     /**
-     * Busca histórico de uma criptomoeda específica
+     * Busca uma criptomoeda salva específica
      */
     public Optional<CryptoCurrency> getSavedCryptoByCoinId(String coinId) {
         return cryptoRepository.findByCoinId(coinId);

@@ -2,15 +2,19 @@ package com.crypto.service;
 
 import com.crypto.model.AlertRule;
 import com.crypto.dto.CryptoCurrency;
+import com.crypto.model.User;
 import com.crypto.model.dto.NotificationMessage;
 import com.crypto.repository.AlertRuleRepository;
+import com.crypto.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -19,231 +23,167 @@ public class AlertService {
 
     private final AlertRuleRepository alertRuleRepository;
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
 
-    @Value("${alert.buy.threshold:-5.0}")
-    private Double buyThreshold;
+    private final DecimalFormat df = new DecimalFormat("#,##0.00");
 
-    @Value("${alert.sell.threshold:10.0}")
-    private Double sellThreshold;
+    public void processAlerts(List<CryptoCurrency> cryptos) {
+        for (CryptoCurrency crypto : cryptos) {
+            checkAlertsForCrypto(crypto);
+        }
+    }
 
-    private final DecimalFormat decimalFormat = new DecimalFormat("#,##0.00");
-
-    /**
-     * Verifica alertas para uma criptomoeda específica
-     */
     public void checkAlertsForCrypto(CryptoCurrency crypto) {
-        try {
-            // Verificar alertas automáticos (regras padrão)
-            checkDefaultAlerts(crypto);
+        List<AlertRule> rules = alertRuleRepository.findByCoinSymbolAndActiveTrue(crypto.getSymbol());
 
-            // Verificar regras de alertas personalizadas
-            List<AlertRule> activeRules = alertRuleRepository
-                    .findByCoinSymbolAndIsActiveTrue(crypto.getSymbol().toUpperCase());
-
-            for (AlertRule rule : activeRules) {
-                checkCustomAlert(crypto, rule);
-            }
-
-        } catch (Exception e) {
-            log.error("Erro ao verificar alertas para {}: {}", crypto.getSymbol(), e.getMessage());
-        }
-    }
-
-    /**
-     * Verifica alertas padrão baseados em thresholds configurados
-     */
-    private void checkDefaultAlerts(CryptoCurrency crypto) {
-        if (crypto.getPriceChange24h() == null) {
-            return;
-        }
-
-        double change24h = crypto.getPriceChange24h().doubleValue();
-
-        // Alerta de COMPRA - queda significativa
-        if (change24h <= buyThreshold) {
-            NotificationMessage message = NotificationMessage.builder()
-                    .coinSymbol(crypto.getSymbol().toUpperCase())
-                    .coinName(crypto.getName())
-                    .currentPrice("$" + decimalFormat.format(crypto.getCurrentPrice()))
-                    .changePercentage(decimalFormat.format(change24h) + "%")
-                    .alertType(AlertRule.AlertType.PRICE_DECREASE)
-                    .message(String.format(
-                            "🟢 OPORTUNIDADE DE COMPRA!\n" +
-                                    "%s (%s) caiu %.2f%% nas últimas 24h\n" +
-                                    "Preço atual: $%s\n" +
-                                    "Pode ser um bom momento para comprar!",
-                            crypto.getName(),
-                            crypto.getSymbol().toUpperCase(),
-                            change24h,
-                            decimalFormat.format(crypto.getCurrentPrice())
-                    ))
-                    .build();
-
-            notificationService.sendNotification(message);
-        }
-
-        // Alerta de VENDA - alta significativa
-        if (change24h >= sellThreshold) {
-            NotificationMessage message = NotificationMessage.builder()
-                    .coinSymbol(crypto.getSymbol().toUpperCase())
-                    .coinName(crypto.getName())
-                    .currentPrice("$" + decimalFormat.format(crypto.getCurrentPrice()))
-                    .changePercentage(decimalFormat.format(change24h) + "%")
-                    .alertType(AlertRule.AlertType.PRICE_INCREASE)
-                    .message(String.format(
-                            "🔴 CONSIDERE VENDER!\n" +
-                                    "%s (%s) subiu %.2f%% nas últimas 24h\n" +
-                                    "Preço atual: $%s\n" +
-                                    "Pode ser um bom momento para realizar lucros!",
-                            crypto.getName(),
-                            crypto.getSymbol().toUpperCase(),
-                            change24h,
-                            decimalFormat.format(crypto.getCurrentPrice())
-                    ))
-                    .build();
-
-            notificationService.sendNotification(message);
-        }
-
-        // Alerta de volatilidade extrema (1h)
-        if (crypto.getPriceChange1h() != null) {
-            double change1h = crypto.getPriceChange1h().doubleValue();
-            if (Math.abs(change1h) >= 15.0) { // Mudança > 15% em 1 hora
-                NotificationMessage message = NotificationMessage.builder()
-                        .coinSymbol(crypto.getSymbol().toUpperCase())
-                        .coinName(crypto.getName())
-                        .currentPrice("$" + decimalFormat.format(crypto.getCurrentPrice()))
-                        .changePercentage(decimalFormat.format(change1h) + "%")
-                        .alertType(change1h > 0 ? AlertRule.AlertType.PRICE_INCREASE : AlertRule.AlertType.PRICE_DECREASE)
-                        .message(String.format(
-                                "⚠️ VOLATILIDADE EXTREMA!\n" +
-                                        "%s (%s) teve variação de %.2f%% na última hora\n" +
-                                        "Preço atual: $%s\n" +
-                                        "Monitore de perto!",
-                                crypto.getName(),
-                                crypto.getSymbol().toUpperCase(),
-                                change1h,
-                                decimalFormat.format(crypto.getCurrentPrice())
-                        ))
-                        .build();
-
-                notificationService.sendNotification(message);
+        for (AlertRule rule : rules) {
+            try {
+                if (shouldTriggerAlert(crypto, rule)) {
+                    triggerAlert(crypto, rule);
+                }
+            } catch (Exception e) {
+                log.error("Erro ao verificar regra {} para {}: {}", rule.getId(), crypto.getSymbol(), e.getMessage());
             }
         }
     }
 
-    /**
-     * Verifica alertas personalizados criados pelo usuário
-     */
-    private void checkCustomAlert(CryptoCurrency crypto, AlertRule rule) {
-        try {
-            BigDecimal changeValue = BigDecimal.valueOf(getChangeValueByPeriod(crypto, rule.getTimePeriod()));
+    private boolean shouldTriggerAlert(CryptoCurrency crypto, AlertRule rule) {
+        BigDecimal threshold = rule.getThresholdValue();
 
-            if (changeValue == null) {
-                return;
-            }
+        switch (rule.getAlertType()) {
+            case PRICE_INCREASE:
+                return crypto.getCurrentPrice() != null && crypto.getCurrentPrice().compareTo(threshold) >= 0;
 
-            boolean shouldAlert = false;
-            String alertDirection = "";
+            case PRICE_DECREASE:
+                return crypto.getCurrentPrice() != null && crypto.getCurrentPrice().compareTo(threshold) <= 0;
 
-            switch (rule.getAlertType()) {
-                case PRICE_INCREASE:
-                    shouldAlert = changeValue.compareTo(rule.getThresholdValue()) >= 0;
-                    alertDirection = "subiu";
-                    break;
-                case PRICE_DECREASE:
-                    shouldAlert = changeValue.compareTo(rule.getThresholdValue().negate()) <= 0;
-                    alertDirection = "caiu";
-                    break;
-                case VOLUME_SPIKE:
-                    // Implementar lógica de volume futuramente
-                    break;
-            }
+            case VOLUME_SPIKE:
+                return crypto.getTotalVolume() != null && crypto.getTotalVolume().compareTo(threshold) >= 0;
 
-            if (shouldAlert) {
-                NotificationMessage message = NotificationMessage.builder()
-                        .coinSymbol(crypto.getSymbol().toUpperCase())
-                        .coinName(crypto.getName())
-                        .currentPrice("$" + decimalFormat.format(crypto.getCurrentPrice()))
-                        .changePercentage(decimalFormat.format(changeValue) + "%")
-                        .alertType(rule.getAlertType())
-                        .recipient(rule.getNotificationEmail())
-                        .message(String.format(
-                                "🔔 ALERTA PERSONALIZADO!\n" +
-                                        "%s (%s) %s %.2f%% no período de %s\n" +
-                                        "Preço atual: $%s\n" +
-                                        "Limite configurado: %.2f%%",
-                                crypto.getName(),
-                                crypto.getSymbol().toUpperCase(),
-                                alertDirection,
-                                Math.abs(changeValue.doubleValue()),
-                                getPeriodDescription(rule.getTimePeriod()),
-                                decimalFormat.format(crypto.getCurrentPrice()),
-                                rule.getThresholdValue().doubleValue()
-                        ))
-                        .build();
+            case PERCENT_CHANGE_24H:
+                return crypto.getPriceChange24h() != null &&
+                        BigDecimal.valueOf(Math.abs(crypto.getPriceChange24h())).compareTo(threshold) >= 0;
 
-                notificationService.sendNotification(message);
-            }
+            case MARKET_CAP:
+                return crypto.getMarketCap() != null && crypto.getMarketCap().compareTo(threshold) >= 0;
 
-        } catch (Exception e) {
-            log.error("Erro ao verificar alerta personalizado: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Obtém o valor de mudança baseado no período
-     */
-    private Double getChangeValueByPeriod(CryptoCurrency crypto, AlertRule.TimePeriod period) {
-        switch (period) {
-            case ONE_HOUR:
-                return crypto.getPriceChange1h();
-            case TWENTY_FOUR_HOURS:
-                return crypto.getPriceChange24h();
-            case SEVEN_DAYS:
-                return crypto.getPriceChange7d();
             default:
-                return null;
+                return false;
         }
     }
 
-    /**
-     * Retorna descrição do período para mensagens
-     */
-    private String getPeriodDescription(AlertRule.TimePeriod period) {
-        switch (period) {
-            case ONE_HOUR:
-                return "1 hora";
-            case TWENTY_FOUR_HOURS:
-                return "24 horas";
-            case SEVEN_DAYS:
-                return "7 dias";
+    private void triggerAlert(CryptoCurrency crypto, AlertRule rule) {
+        String message = buildAlertMessage(crypto, rule);
+
+        NotificationMessage notification = NotificationMessage.builder()
+                .coinSymbol(crypto.getSymbol())
+                .coinName(crypto.getName())
+                .currentPrice("$" + df.format(crypto.getCurrentPrice()))
+                .changePercentage(crypto.getPriceChange24h() != null
+                        ? String.format("%.2f%%", crypto.getPriceChange24h())
+                        : "N/A")
+                .alertType(rule.getAlertType())
+                .message(message)
+                .recipient(rule.getNotificationEmail())
+                .build();
+
+        notificationService.sendNotification(notification);
+
+        log.info("Alerta disparado: {} - {} -> {}", crypto.getSymbol(), rule.getAlertType(), message);
+    }
+
+    private String buildAlertMessage(CryptoCurrency crypto, AlertRule rule) {
+        switch (rule.getAlertType()) {
+            case PRICE_INCREASE:
+                return String.format(
+                        "\uD83D\uDE80 %s (%s) atingiu $%s (limite $%s). Variação 24h: %.2f%%",
+                        crypto.getName(),
+                        crypto.getSymbol(),
+                        df.format(crypto.getCurrentPrice()),
+                        df.format(rule.getThresholdValue()),
+                        crypto.getPriceChange24h() != null ? crypto.getPriceChange24h() : 0
+                );
+
+            case PRICE_DECREASE:
+                return String.format(
+                        "\uD83D\uDCC9 %s (%s) caiu para $%s (limite $%s). Variação 24h: %.2f%%",
+                        crypto.getName(),
+                        crypto.getSymbol(),
+                        df.format(crypto.getCurrentPrice()),
+                        df.format(rule.getThresholdValue()),
+                        crypto.getPriceChange24h() != null ? crypto.getPriceChange24h() : 0
+                );
+
+            case VOLUME_SPIKE:
+                return String.format(
+                        "\uD83D\uDCCA %s (%s) com volume acima de %s (atual %s)",
+                        crypto.getName(),
+                        crypto.getSymbol(),
+                        df.format(rule.getThresholdValue()),
+                        df.format(crypto.getTotalVolume())
+                );
+
+            case PERCENT_CHANGE_24H:
+                return String.format(
+                        "\u26A1 %s (%s) variou %.2f%% nas últimas 24h (limite: %s%%)",
+                        crypto.getName(),
+                        crypto.getSymbol(),
+                        crypto.getPriceChange24h(),
+                        df.format(rule.getThresholdValue())
+                );
+
+            case MARKET_CAP:
+                return String.format(
+                        "\uD83C\uDFE6 %s (%s) com market cap acima de %s (atual %s)",
+                        crypto.getName(),
+                        crypto.getSymbol(),
+                        df.format(rule.getThresholdValue()),
+                        df.format(crypto.getMarketCap())
+                );
+
             default:
-                return "período desconhecido";
+                return String.format("%s (%s) - alerta disparado", crypto.getName(), crypto.getSymbol());
         }
     }
 
-    /**
-     * Cria nova regra de alerta personalizada
-     */
     public AlertRule createAlertRule(AlertRule alertRule) {
-        return alertRuleRepository.save(alertRule);
+        try {
+            Object principal = SecurityContextHolder.getContext().getAuthentication() != null
+                    ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
+                    : null;
+
+            if (principal instanceof org.springframework.security.core.userdetails.User) {
+                String username = ((org.springframework.security.core.userdetails.User) principal).getUsername();
+                Optional<User> u = userRepository.findByUsername(username);
+                u.ifPresent(alertRule::setUser);
+            }
+        } catch (Exception e) {
+            log.debug("Não foi possível vincular usuário à regra: {}", e.getMessage());
+        }
+
+        alertRule.setActive(true);
+        AlertRule saved = alertRuleRepository.save(alertRule);
+        log.info("Nova regra de alerta criada: {}", saved);
+        return saved;
     }
 
-    /**
-     * Lista todas as regras de alerta ativas
-     */
     public List<AlertRule> getActiveAlertRules() {
-        return alertRuleRepository.findByIsActiveTrue();
+        return alertRuleRepository.findByActiveTrue();
     }
 
-    /**
-     * Desativa uma regra de alerta
-     */
     public void deactivateAlertRule(Long ruleId) {
         alertRuleRepository.findById(ruleId).ifPresent(rule -> {
-            rule.setIsActive(false);
+            rule.setActive(false);
             alertRuleRepository.save(rule);
+            log.info("Regra de alerta {} desativada", ruleId);
         });
     }
+
+    public java.util.List<AlertRule> getAlertRulesForUser(String username) {
+        return alertRuleRepository.findAll()
+                .stream()
+                .filter(r -> r.getUser() != null && username.equals(r.getUser().getUsername()))
+                .toList();
+    }
+
 }

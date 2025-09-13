@@ -1,5 +1,6 @@
 package com.crypto.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -20,10 +21,11 @@ public class CryptoCurrency {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonIgnore // Não mapeia esse campo no JSON
     private Long id;
 
     @Column(unique = true, nullable = false)
-    @JsonProperty("id")
+    @JsonProperty("id") // Esse será mapeado do JSON
     private String coinId;
 
     @JsonProperty("symbol")
@@ -35,7 +37,6 @@ public class CryptoCurrency {
     @JsonProperty("current_price")
     private BigDecimal currentPrice;
 
-    // Alinhados com AlertService
     @JsonProperty("price_change_percentage_1h_in_currency")
     private Double priceChange1h;
 

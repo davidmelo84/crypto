@@ -6,5 +6,5 @@ import java.util.List;
 
 @Data
 public class CoinGeckoResponse {
-    private List<CryptoCurrency> data;
+    private List<CryptoCurrency> cryptocurrencies;
 }

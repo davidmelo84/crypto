@@ -8,19 +8,12 @@ spring:
   application:
     name: crypto-monitor
 
-  # Configuração do banco de dados
+  # Configuração do banco de dados PostgreSQL
   datasource:
-    # H2 para desenvolvimento
-    url: jdbc:h2:mem:cryptodb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-
-    # PostgreSQL para produção (descomente quando necessário)
-    # url: jdbc:postgresql://localhost:5432/crypto_monitor
-    # driver-class-name: org.postgresql.Driver
-    # username: ${DB_USERNAME:crypto_user}
-    # password: ${DB_PASSWORD:crypto_password}
+    url: jdbc:postgresql://localhost:5432/crypto_monitor
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:crypto_user}
+    password: ${DB_PASSWORD:qwe123}
 
   # Configuração JPA/Hibernate
   jpa:
@@ -29,18 +22,9 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
-        # dialect: org.hibernate.dialect.PostgreSQLDialect # Para PostgreSQL
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     defer-datasource-initialization: true
-
-  # Console H2 (apenas desenvolvimento)
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-      settings:
-        web-allow-others: true
 
   # Configuração de Email
   mail:

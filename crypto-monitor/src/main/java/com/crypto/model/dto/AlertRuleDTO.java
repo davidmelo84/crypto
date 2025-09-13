@@ -3,6 +3,7 @@ package com.crypto.model.dto;
 import com.crypto.model.AlertRule;
 import jakarta.validation.constraints.*;
 import lombok.Data;
+
 import java.math.BigDecimal;
 
 @Data
@@ -15,25 +16,21 @@ public class AlertRuleDTO {
     @NotNull(message = "Tipo de alerta é obrigatório")
     private AlertRule.AlertType alertType;
 
-    @NotNull(message = "Valor do limite é obrigatório")
-    @DecimalMin(value = "0.01", message = "Valor deve ser maior que 0.01")
-    @DecimalMax(value = "1000.0", message = "Valor deve ser menor que 1000")
-    private BigDecimal thresholdValue;
+    @NotNull(message = "Valor alvo é obrigatório")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Valor deve ser maior que zero")
+    private BigDecimal targetValue;
 
-    @NotNull(message = "Período de tempo é obrigatório")
-    private AlertRule.TimePeriod timePeriod;
-
-    @Email(message = "Email deve ter formato válido")
-    private String notificationEmail;
+    @Email(message = "E-mail inválido")
+    @NotBlank(message = "E-mail é obrigatório")
+    private String email;
 
     public AlertRule toEntity() {
-        AlertRule rule = new AlertRule();
-        rule.setCoinSymbol(this.coinSymbol.toUpperCase());
-        rule.setAlertType(this.alertType);
-        rule.setThresholdValue(this.thresholdValue);
-        rule.setTimePeriod(this.timePeriod);
-        rule.setNotificationEmail(this.notificationEmail);
-        rule.setIsActive(true);
-        return rule;
+        AlertRule alertRule = new AlertRule();
+        alertRule.setCoinSymbol(this.coinSymbol);
+        alertRule.setAlertType(this.alertType);
+        alertRule.setTargetValue(this.targetValue);
+        alertRule.setEmail(this.email);
+        alertRule.setActive(true); // nova regra sempre ativa por padrão
+        return alertRule;
     }
 }
