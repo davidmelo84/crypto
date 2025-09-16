@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -28,8 +30,13 @@ public class CryptoService {
     private String coinsToMonitor;
 
     /**
-     * Busca preços atuais da API
+     * Busca preços atuais da API com retry
      */
+    @Retryable(
+            value = { Exception.class },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000)
+    )
     public List<CryptoCurrency> getCurrentPrices() {
         try {
             String url = String.format("%s/coins/markets?vs_currency=usd&ids=%s" +
@@ -65,8 +72,13 @@ public class CryptoService {
     }
 
     /**
-     * Busca uma criptomoeda específica por coinId
+     * Busca uma criptomoeda específica por coinId com retry
      */
+    @Retryable(
+            value = { Exception.class },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000)
+    )
     public Optional<CryptoCurrency> getCryptoByCoinId(String coinId) {
         try {
             String url = String.format("%s/coins/markets?vs_currency=usd&ids=%s" +

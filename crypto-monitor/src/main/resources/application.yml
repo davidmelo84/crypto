@@ -15,6 +15,12 @@ spring:
     username: ${DB_USERNAME:crypto_user}
     password: ${DB_PASSWORD:qwe123}
 
+
+    # JWT Configuration
+    jwt:
+      secret: ${JWT_SECRET:crypto-monitor-super-secret-key-that-should-be-changed-in-production-environment}
+      expiration: ${JWT_EXPIRATION:86400000} # 24 horas em millisegundos
+
   # Configuração JPA/Hibernate
   jpa:
     hibernate:
