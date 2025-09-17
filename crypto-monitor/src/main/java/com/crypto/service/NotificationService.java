@@ -258,4 +258,22 @@ public class NotificationService {
 
         sendNotification(testMessage);
     }
+
+    // Adicione este método no NotificationService
+    public void sendEmailAlert(String to, String subject, String message) {
+        try {
+            SimpleMailMessage mailMessage = new SimpleMailMessage();
+            mailMessage.setFrom("testeprojeto0001@gmail.com"); // ou "testeprojeto0001@gmail.com"
+            mailMessage.setTo(to);
+            mailMessage.setSubject(subject);
+            mailMessage.setText(message);
+
+            mailSender.send(mailMessage);
+            log.info("Email de alerta enviado com sucesso para: {}", to);
+
+        } catch (Exception e) {
+            log.error("Erro ao enviar email de alerta: {}", e.getMessage(), e);
+            throw new RuntimeException("Falha no envio de email", e);
+        }
+    }
 }

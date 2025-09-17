@@ -1,4 +1,5 @@
 # application.yml
+
 server:
   port: 8080
   servlet:
@@ -15,36 +16,47 @@ spring:
     username: ${DB_USERNAME:crypto_user}
     password: ${DB_PASSWORD:qwe123}
 
-
-    # JWT Configuration
-    jwt:
-      secret: ${JWT_SECRET:crypto-monitor-super-secret-key-that-should-be-changed-in-production-environment}
-      expiration: ${JWT_EXPIRATION:86400000} # 24 horas em millisegundos
-
   # Configuração JPA/Hibernate
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none  # ALTERADO: era 'update', agora 'none' para deixar o Flyway gerenciar
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    defer-datasource-initialization: true
+    defer-datasource-initialization: false  # ALTERADO: era true, agora false
+
+  database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+  # Flyway migration config
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    url: jdbc:postgresql://localhost:5432/crypto_monitor
+    user: ${DB_USERNAME:crypto_user}
+    password: ${DB_PASSWORD:qwe123}
+    baseline-on-migrate: true
+    validate-on-migrate: true  # ADICIONADO: valida as migrações
+    out-of-order: false        # ADICIONADO: garante ordem das migrações
+
+  # JWT Configuration
+  jwt:
+    secret: ${JWT_SECRET:crypto-monitor-super-secret-key-that-should-be-changed-in-production-environment}
+    expiration: ${JWT_EXPIRATION:86400000} # 24 horas em milissegundos
 
   # Configuração de Email
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${MAIL_USERNAME:seu-email@gmail.com}
-    password: ${MAIL_PASSWORD:sua-senha-de-app}
+    username: ${MAIL_USERNAME:testeprojeto0001@gmail.com}
+    password: ${MAIL_PASSWORD:cuuiungfqytluwrr}  # CORRIGIDO: removidos espaços
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
-            required: true
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
@@ -56,16 +68,16 @@ crypto:
 # Configurações de alertas
 alert:
   buy:
-    threshold: -5.0  # Alerta de compra quando cair 5% ou mais
+    threshold: -1.0  # ALTERADO: de -5.0 para -1.0 para testar alertas mais facilmente
   sell:
-    threshold: 10.0  # Alerta de venda quando subir 10% ou mais
+    threshold: 1.0   # ALTERADO: de 10.0 para 1.0 para testar alertas mais facilmente
 
 # Configurações de notificação
 notification:
   email:
     enabled: true
-    from: ${MAIL_USERNAME:crypto-monitor@exemplo.com}
-    to: ${NOTIFICATION_EMAIL:seu-email@gmail.com}
+    from: ${MAIL_USERNAME:testeprojeto0001@gmail.com}
+    to: ${NOTIFICATION_EMAIL:testeprojeto0001@gmail.com}
 
   telegram:
     enabled: ${TELEGRAM_ENABLED:false}
@@ -83,6 +95,7 @@ logging:
     com.crypto: INFO
     org.springframework.web: DEBUG
     org.springframework.mail: DEBUG
+    org.flywaydb: DEBUG  # ADICIONADO: logs do Flyway para debug
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
@@ -99,6 +112,9 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    mail:
+      enabled: false  # ADICIONADO: desabilita health check de email
   info:
     env:
       enabled: true
@@ -110,6 +126,6 @@ info:
     description: Sistema de Monitoramento de Criptomoedas
     version: 1.0.0
   java:
-    version: 17.0.16
+    version: "17.0.16"
   build:
     timestamp: ${TIMESTAMP}

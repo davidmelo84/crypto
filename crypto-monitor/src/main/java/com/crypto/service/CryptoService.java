@@ -4,6 +4,7 @@ import com.crypto.dto.CryptoCurrency;
 import com.crypto.repository.CryptoCurrencyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.retry.annotation.Backoff;
@@ -23,11 +24,24 @@ public class CryptoService {
     private final WebClient webClient;
     private final CryptoCurrencyRepository cryptoRepository;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Value("${coingecko.api.url:https://api.coingecko.com/api/v3}")
     private String coinGeckoApiUrl;
 
     @Value("${crypto.coins:bitcoin,ethereum,cardano,polkadot,chainlink}")
     private String coinsToMonitor;
+
+    // Thresholds automáticos do application.yml
+    @Value("${alert.buy.threshold:-5.0}")
+    private double buyThreshold;
+
+    @Value("${alert.sell.threshold:10.0}")
+    private double sellThreshold;
+
+    @Value("${notification.email.to:testeprojeto0001@gmail.com}")
+    private String notificationEmail;
 
     /**
      * Busca preços atuais da API com retry
@@ -55,6 +69,10 @@ public class CryptoService {
 
             if (cryptos != null && !cryptos.isEmpty()) {
                 log.info("Encontradas {} criptomoedas", cryptos.size());
+
+                // NOVO: Verificar alertas automáticos
+                checkAutomaticAlerts(cryptos);
+
                 return cryptos;
             }
 
@@ -68,6 +86,105 @@ public class CryptoService {
         } catch (Exception e) {
             log.error("Erro inesperado ao buscar cotações: {}", e.getMessage(), e);
             throw new RuntimeException("Erro interno ao buscar cotações", e);
+        }
+    }
+
+    /**
+     * NOVO: Verifica alertas automáticos baseados nos thresholds do application.yml
+     */
+    private void checkAutomaticAlerts(List<CryptoCurrency> cryptos) {
+        log.info("Verificando alertas automáticos - Buy: {}%, Sell: {}%", buyThreshold, sellThreshold);
+
+        for (CryptoCurrency crypto : cryptos) {
+            try {
+                if (crypto.getPriceChange24h() != null) {
+                    double change24h = crypto.getPriceChange24h();
+
+                    log.debug("{} variação 24h: {}%", crypto.getSymbol(), change24h);
+
+                    // Alerta de COMPRA (queda maior ou igual ao threshold)
+                    if (change24h <= buyThreshold) {
+                        sendBuyAlert(crypto);
+                    }
+
+                    // Alerta de VENDA (alta maior ou igual ao threshold)
+                    if (change24h >= sellThreshold) {
+                        sendSellAlert(crypto);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Erro ao verificar alertas para {}: {}", crypto.getSymbol(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * NOVO: Envia alerta de oportunidade de compra
+     */
+    private void sendBuyAlert(CryptoCurrency crypto) {
+        String subject = String.format("🟢 OPORTUNIDADE DE COMPRA - %s", crypto.getName());
+        String message = String.format(
+                "Alerta de Compra - Crypto Monitor\n\n" +
+                        "🟢 OPORTUNIDADE DE COMPRA DETECTADA!\n\n" +
+                        "Criptomoeda: %s (%s)\n" +
+                        "Preço Atual: $%.2f\n" +
+                        "Variação 24h: %.2f%%\n" +
+                        "Threshold Configurado: %.1f%%\n\n" +
+                        "Esta criptomoeda caiu além do seu limite configurado.\n" +
+                        "Considere esta oportunidade de compra!\n\n" +
+                        "---\n" +
+                        "Crypto Monitor - Sistema Automático de Alertas",
+                crypto.getName(),
+                crypto.getSymbol().toUpperCase(),
+                crypto.getCurrentPrice(),
+                crypto.getPriceChange24h(),
+                buyThreshold
+        );
+
+        log.info("🟢 ALERTA DE COMPRA disparado: {} caiu {}% (limite: {}%)",
+                crypto.getName(), crypto.getPriceChange24h(), buyThreshold);
+
+        sendEmailNotification(subject, message);
+    }
+
+    /**
+     * NOVO: Envia alerta de venda
+     */
+    private void sendSellAlert(CryptoCurrency crypto) {
+        String subject = String.format("🔴 ALERTA DE VENDA - %s", crypto.getName());
+        String message = String.format(
+                "Alerta de Venda - Crypto Monitor\n\n" +
+                        "🔴 ALERTA DE VENDA DISPARADO!\n\n" +
+                        "Criptomoeda: %s (%s)\n" +
+                        "Preço Atual: $%.2f\n" +
+                        "Variação 24h: +%.2f%%\n" +
+                        "Threshold Configurado: +%.1f%%\n\n" +
+                        "Esta criptomoeda subiu além do seu limite configurado.\n" +
+                        "Considere realizar lucros!\n\n" +
+                        "---\n" +
+                        "Crypto Monitor - Sistema Automático de Alertas",
+                crypto.getName(),
+                crypto.getSymbol().toUpperCase(),
+                crypto.getCurrentPrice(),
+                crypto.getPriceChange24h(),
+                sellThreshold
+        );
+
+        log.info("🔴 ALERTA DE VENDA disparado: {} subiu +{}% (limite: +{}%)",
+                crypto.getName(), crypto.getPriceChange24h(), sellThreshold);
+
+        sendEmailNotification(subject, message);
+    }
+
+    /**
+     * NOVO: Envia notificação por email
+     */
+    private void sendEmailNotification(String subject, String message) {
+        try {
+            notificationService.sendEmailAlert(notificationEmail, subject, message);
+            log.info("Email de alerta enviado para: {}", notificationEmail);
+        } catch (Exception e) {
+            log.error("Erro ao enviar email de alerta: {}", e.getMessage());
         }
     }
 
