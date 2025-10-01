@@ -27,12 +27,24 @@ public class AlertService {
 
     private final DecimalFormat df = new DecimalFormat("#,##0.00");
 
+    /**
+     * ============================================
+     * MÉTODOS ORIGINAIS (Mantidos para compatibilidade)
+     * ============================================
+     */
+
+    /**
+     * Processa alertas para todas as criptomoedas (todos os usuários)
+     */
     public void processAlerts(List<CryptoCurrency> cryptos) {
         for (CryptoCurrency crypto : cryptos) {
             checkAlertsForCrypto(crypto);
         }
     }
 
+    /**
+     * Verifica alertas para uma criptomoeda específica (todos os usuários)
+     */
     public void checkAlertsForCrypto(CryptoCurrency crypto) {
         List<AlertRule> rules = alertRuleRepository.findByCoinSymbolAndActiveTrue(crypto.getSymbol());
 
@@ -47,31 +59,158 @@ public class AlertService {
         }
     }
 
+    /**
+     * ============================================
+     * NOVOS MÉTODOS - FILTRADOS POR USUÁRIO
+     * ============================================
+     */
+
+    /**
+     * NOVO: Processa alertas APENAS para um usuário específico
+     *
+     * Este método é chamado pelo MonitoringControlService quando o usuário
+     * tem monitoramento ativo.
+     *
+     * @param cryptos Lista de criptomoedas atualizadas
+     * @param userEmail Email do usuário que receberá os alertas
+     */
+    public void processAlertsForUser(List<CryptoCurrency> cryptos, String userEmail) {
+        log.info("🔍 Processando alertas para email: {}", userEmail);
+
+        int alertsChecked = 0;
+        int alertsTriggered = 0;
+
+        for (CryptoCurrency crypto : cryptos) {
+            try {
+                // Busca apenas alertas ATIVOS deste email para esta crypto
+                List<AlertRule> rules = alertRuleRepository
+                        .findByCoinSymbolAndNotificationEmailAndActiveTrue(
+                                crypto.getSymbol(),
+                                userEmail
+                        );
+
+                alertsChecked += rules.size();
+
+                for (AlertRule rule : rules) {
+                    try {
+                        if (shouldTriggerAlert(crypto, rule)) {
+                            triggerAlert(crypto, rule);
+                            alertsTriggered++;
+                        }
+                    } catch (Exception e) {
+                        log.error("Erro ao verificar regra {} para {} (usuário: {}): {}",
+                                rule.getId(), crypto.getSymbol(), userEmail, e.getMessage());
+                    }
+                }
+
+            } catch (Exception e) {
+                log.error("Erro ao processar {} para {}: {}",
+                        crypto.getSymbol(), userEmail, e.getMessage());
+            }
+        }
+
+        log.info("✅ Processamento concluído para {}: {} alertas verificados, {} disparados",
+                userEmail, alertsChecked, alertsTriggered);
+    }
+
+    /**
+     * NOVO: Verifica alertas de uma crypto específica APENAS para um usuário
+     *
+     * Útil para processamento sob demanda de uma criptomoeda específica
+     *
+     * @param crypto Criptomoeda a verificar
+     * @param userEmail Email do usuário
+     */
+    public void checkAlertsForCryptoAndUser(CryptoCurrency crypto, String userEmail) {
+        log.debug("🔍 Verificando alertas de {} para {}", crypto.getSymbol(), userEmail);
+
+        // Busca alertas ativos deste email para esta crypto
+        List<AlertRule> rules = alertRuleRepository
+                .findByCoinSymbolAndNotificationEmailAndActiveTrue(
+                        crypto.getSymbol(),
+                        userEmail
+                );
+
+        if (rules.isEmpty()) {
+            log.debug("Nenhum alerta ativo para {} (usuário: {})", crypto.getSymbol(), userEmail);
+            return;
+        }
+
+        for (AlertRule rule : rules) {
+            try {
+                if (shouldTriggerAlert(crypto, rule)) {
+                    triggerAlert(crypto, rule);
+                    log.info("🔔 Alerta disparado: {} para {} (regra: {})",
+                            crypto.getSymbol(), userEmail, rule.getId());
+                }
+            } catch (Exception e) {
+                log.error("Erro ao verificar regra {} para {} (usuário: {}): {}",
+                        rule.getId(), crypto.getSymbol(), userEmail, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * NOVO: Busca todos os alertas ativos de um usuário específico
+     *
+     * Útil para exibir no dashboard do usuário
+     *
+     * @param userEmail Email do usuário
+     * @return Lista de alertas ativos deste usuário
+     */
+    public List<AlertRule> getActiveAlertRulesForUser(String userEmail) {
+        log.debug("📋 Buscando alertas ativos para: {}", userEmail);
+
+        List<AlertRule> rules = alertRuleRepository
+                .findByNotificationEmailAndActiveTrue(userEmail);
+
+        log.debug("Encontrados {} alertas ativos para {}", rules.size(), userEmail);
+        return rules;
+    }
+
+    /**
+     * ============================================
+     * MÉTODOS DE VERIFICAÇÃO E TRIGGER
+     * (Não alterados - usados pelos métodos acima)
+     * ============================================
+     */
+
+    /**
+     * Verifica se o alerta deve ser disparado
+     */
     private boolean shouldTriggerAlert(CryptoCurrency crypto, AlertRule rule) {
         BigDecimal threshold = rule.getThresholdValue();
 
         switch (rule.getAlertType()) {
             case PRICE_INCREASE:
-                return crypto.getCurrentPrice() != null && crypto.getCurrentPrice().compareTo(threshold) >= 0;
+                return crypto.getCurrentPrice() != null &&
+                        crypto.getCurrentPrice().compareTo(threshold) >= 0;
 
             case PRICE_DECREASE:
-                return crypto.getCurrentPrice() != null && crypto.getCurrentPrice().compareTo(threshold) <= 0;
+                return crypto.getCurrentPrice() != null &&
+                        crypto.getCurrentPrice().compareTo(threshold) <= 0;
 
             case VOLUME_SPIKE:
-                return crypto.getTotalVolume() != null && crypto.getTotalVolume().compareTo(threshold) >= 0;
+                return crypto.getTotalVolume() != null &&
+                        crypto.getTotalVolume().compareTo(threshold) >= 0;
 
             case PERCENT_CHANGE_24H:
                 return crypto.getPriceChange24h() != null &&
-                        BigDecimal.valueOf(Math.abs(crypto.getPriceChange24h())).compareTo(threshold) >= 0;
+                        BigDecimal.valueOf(Math.abs(crypto.getPriceChange24h()))
+                                .compareTo(threshold) >= 0;
 
             case MARKET_CAP:
-                return crypto.getMarketCap() != null && crypto.getMarketCap().compareTo(threshold) >= 0;
+                return crypto.getMarketCap() != null &&
+                        crypto.getMarketCap().compareTo(threshold) >= 0;
 
             default:
                 return false;
         }
     }
 
+    /**
+     * Dispara o alerta enviando notificação
+     */
     private void triggerAlert(CryptoCurrency crypto, AlertRule rule) {
         String message = buildAlertMessage(crypto, rule);
 
@@ -89,14 +228,18 @@ public class AlertService {
 
         notificationService.sendNotification(notification);
 
-        log.info("Alerta disparado: {} - {} -> {}", crypto.getSymbol(), rule.getAlertType(), message);
+        log.info("🔔 Alerta disparado: {} - {} -> {}",
+                crypto.getSymbol(), rule.getAlertType(), message);
     }
 
+    /**
+     * Constrói a mensagem do alerta
+     */
     private String buildAlertMessage(CryptoCurrency crypto, AlertRule rule) {
         switch (rule.getAlertType()) {
             case PRICE_INCREASE:
                 return String.format(
-                        "\uD83D\uDE80 %s (%s) atingiu $%s (limite $%s). Variação 24h: %.2f%%",
+                        "🚀 %s (%s) atingiu $%s (limite $%s). Variação 24h: %.2f%%",
                         crypto.getName(),
                         crypto.getSymbol(),
                         df.format(crypto.getCurrentPrice()),
@@ -106,7 +249,7 @@ public class AlertService {
 
             case PRICE_DECREASE:
                 return String.format(
-                        "\uD83D\uDCC9 %s (%s) caiu para $%s (limite $%s). Variação 24h: %.2f%%",
+                        "📉 %s (%s) caiu para $%s (limite $%s). Variação 24h: %.2f%%",
                         crypto.getName(),
                         crypto.getSymbol(),
                         df.format(crypto.getCurrentPrice()),
@@ -116,7 +259,7 @@ public class AlertService {
 
             case VOLUME_SPIKE:
                 return String.format(
-                        "\uD83D\uDCCA %s (%s) com volume acima de %s (atual %s)",
+                        "📊 %s (%s) com volume acima de %s (atual %s)",
                         crypto.getName(),
                         crypto.getSymbol(),
                         df.format(rule.getThresholdValue()),
@@ -125,7 +268,7 @@ public class AlertService {
 
             case PERCENT_CHANGE_24H:
                 return String.format(
-                        "\u26A1 %s (%s) variou %.2f%% nas últimas 24h (limite: %s%%)",
+                        "⚡ %s (%s) variou %.2f%% nas últimas 24h (limite: %s%%)",
                         crypto.getName(),
                         crypto.getSymbol(),
                         crypto.getPriceChange24h(),
@@ -134,7 +277,7 @@ public class AlertService {
 
             case MARKET_CAP:
                 return String.format(
-                        "\uD83C\uDFE6 %s (%s) com market cap acima de %s (atual %s)",
+                        "🏦 %s (%s) com market cap acima de %s (atual %s)",
                         crypto.getName(),
                         crypto.getSymbol(),
                         df.format(rule.getThresholdValue()),
@@ -142,10 +285,21 @@ public class AlertService {
                 );
 
             default:
-                return String.format("%s (%s) - alerta disparado", crypto.getName(), crypto.getSymbol());
+                return String.format("%s (%s) - alerta disparado",
+                        crypto.getName(), crypto.getSymbol());
         }
     }
 
+    /**
+     * ============================================
+     * MÉTODOS DE GERENCIAMENTO DE ALERTAS
+     * (Não alterados)
+     * ============================================
+     */
+
+    /**
+     * Cria uma nova regra de alerta
+     */
     public AlertRule createAlertRule(AlertRule alertRule) {
         try {
             Object principal = SecurityContextHolder.getContext().getAuthentication() != null
@@ -163,27 +317,141 @@ public class AlertService {
 
         alertRule.setActive(true);
         AlertRule saved = alertRuleRepository.save(alertRule);
-        log.info("Nova regra de alerta criada: {}", saved);
+        log.info("✅ Nova regra de alerta criada: {}", saved);
         return saved;
     }
 
+    /**
+     * Retorna todas as regras de alerta ativas
+     */
     public List<AlertRule> getActiveAlertRules() {
         return alertRuleRepository.findByActiveTrue();
     }
 
+    /**
+     * Desativa uma regra de alerta
+     */
     public void deactivateAlertRule(Long ruleId) {
         alertRuleRepository.findById(ruleId).ifPresent(rule -> {
             rule.setActive(false);
             alertRuleRepository.save(rule);
-            log.info("Regra de alerta {} desativada", ruleId);
+            log.info("🛑 Regra de alerta {} desativada", ruleId);
         });
     }
 
-    public java.util.List<AlertRule> getAlertRulesForUser(String username) {
+    /**
+     * Retorna alertas de um usuário específico (por username)
+     */
+    public List<AlertRule> getAlertRulesForUser(String username) {
         return alertRuleRepository.findAll()
                 .stream()
                 .filter(r -> r.getUser() != null && username.equals(r.getUser().getUsername()))
                 .toList();
     }
 
+    /**
+     * NOVO: Desativa todos os alertas de um usuário específico (por email)
+     *
+     * Útil quando o usuário para o monitoramento
+     *
+     * @param userEmail Email do usuário
+     * @return Número de alertas desativados
+     */
+    public int deactivateAllAlertsForUser(String userEmail) {
+        log.info("🛑 Desativando todos os alertas para: {}", userEmail);
+
+        List<AlertRule> userAlerts = alertRuleRepository
+                .findByNotificationEmailAndActiveTrue(userEmail);
+
+        int deactivatedCount = 0;
+        for (AlertRule rule : userAlerts) {
+            rule.setActive(false);
+            alertRuleRepository.save(rule);
+            deactivatedCount++;
+        }
+
+        log.info("✅ {} alertas desativados para {}", deactivatedCount, userEmail);
+        return deactivatedCount;
+    }
+
+    /**
+     * NOVO: Reativa todos os alertas de um usuário específico (por email)
+     *
+     * Útil quando o usuário reinicia o monitoramento
+     *
+     * @param userEmail Email do usuário
+     * @return Número de alertas reativados
+     */
+    public int reactivateAllAlertsForUser(String userEmail) {
+        log.info("✅ Reativando alertas para: {}", userEmail);
+
+        List<AlertRule> userAlerts = alertRuleRepository
+                .findAll()
+                .stream()
+                .filter(r -> userEmail.equals(r.getNotificationEmail()) && !r.getActive())
+                .toList();
+
+        int reactivatedCount = 0;
+        for (AlertRule rule : userAlerts) {
+            rule.setActive(true);
+            alertRuleRepository.save(rule);
+            reactivatedCount++;
+        }
+
+        log.info("✅ {} alertas reativados para {}", reactivatedCount, userEmail);
+        return reactivatedCount;
+    }
 }
+
+/*
+ * ============================================
+ * RESUMO DAS ALTERAÇÕES
+ * ============================================
+ *
+ * NOVOS MÉTODOS ADICIONADOS:
+ *
+ * 1. processAlertsForUser(List<CryptoCurrency> cryptos, String userEmail)
+ *    - Processa alertas APENAS para um usuário específico
+ *    - Chamado pelo MonitoringControlService
+ *
+ * 2. checkAlertsForCryptoAndUser(CryptoCurrency crypto, String userEmail)
+ *    - Verifica alertas de uma crypto para um usuário
+ *    - Útil para verificação sob demanda
+ *
+ * 3. getActiveAlertRulesForUser(String userEmail)
+ *    - Retorna alertas ativos de um usuário
+ *    - Útil para dashboard
+ *
+ * 4. deactivateAllAlertsForUser(String userEmail)
+ *    - Desativa todos os alertas de um usuário
+ *    - Chamado quando para o monitoramento
+ *
+ * 5. reactivateAllAlertsForUser(String userEmail)
+ *    - Reativa alertas de um usuário
+ *    - Chamado quando reinicia o monitoramento
+ *
+ * MÉTODOS MANTIDOS (Compatibilidade):
+ * - processAlerts(List<CryptoCurrency> cryptos)
+ * - checkAlertsForCrypto(CryptoCurrency crypto)
+ * - createAlertRule(AlertRule alertRule)
+ * - getActiveAlertRules()
+ * - deactivateAlertRule(Long ruleId)
+ * - getAlertRulesForUser(String username)
+ *
+ * MÉTODOS AUXILIARES (Inalterados):
+ * - shouldTriggerAlert(CryptoCurrency crypto, AlertRule rule)
+ * - triggerAlert(CryptoCurrency crypto, AlertRule rule)
+ * - buildAlertMessage(CryptoCurrency crypto, AlertRule rule)
+ *
+ * ============================================
+ * FLUXO DE USO:
+ * ============================================
+ *
+ * 1. Usuário inicia monitoramento via frontend
+ * 2. MonitoringControlService cria scheduler
+ * 3. Scheduler chama: CryptoMonitoringService.updateAndProcessAlertsForUser(email)
+ * 4. Este chama: AlertService.processAlertsForUser(cryptos, email)
+ * 5. AlertService busca apenas alertas deste email
+ * 6. Verifica condições e dispara notificações
+ * 7. NotificationService envia email apenas para este usuário
+ */

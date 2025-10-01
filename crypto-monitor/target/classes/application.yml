@@ -1,4 +1,4 @@
-# application.yml
+# application.yml - VERSÃO CORRIGIDA PARA MONITORAMENTO POR USUÁRIO
 
 server:
   port: 8080
@@ -19,13 +19,13 @@ spring:
   # Configuração JPA/Hibernate
   jpa:
     hibernate:
-      ddl-auto: none  # ALTERADO: era 'update', agora 'none' para deixar o Flyway gerenciar
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    defer-datasource-initialization: false  # ALTERADO: era true, agora false
+    defer-datasource-initialization: false
 
   database-platform: org.hibernate.dialect.PostgreSQLDialect
 
@@ -37,8 +37,16 @@ spring:
     user: ${DB_USERNAME:crypto_user}
     password: ${DB_PASSWORD:qwe123}
     baseline-on-migrate: true
-    validate-on-migrate: true  # ADICIONADO: valida as migrações
-    out-of-order: false        # ADICIONADO: garante ordem das migrações
+    validate-on-migrate: true
+    out-of-order: false
+
+  # ============================================
+  # IMPORTANTE: DESABILITAR SCHEDULING AUTOMÁTICO
+  # O monitoramento agora é controlado pelo usuário via frontend
+  # ============================================
+  task:
+    scheduling:
+      enabled: false  # ⚠️ CRÍTICO: Desabilita @Scheduled automático
 
   # JWT Configuration
   jwt:
@@ -49,14 +57,16 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${MAIL_USERNAME:testeprojeto0001@gmail.com}
-    password: ${MAIL_PASSWORD:cuuiungfqytluwrr}  # CORRIGIDO: removidos espaços
+    username: ${MAIL_USERNAME:andremendoncaolv@gmail.com}
+    password: ${MAIL_PASSWORD:vjaljbffpdgpcscx}
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
+          ssl:
+            trust: smtp.gmail.com  # Adiciona confiança no servidor SMTP
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
@@ -65,56 +75,106 @@ spring:
 crypto:
   coins: bitcoin,ethereum,cardano,polkadot,chainlink,solana,avalanche-2,polygon,litecoin,bitcoin-cash
 
-# Configurações de alertas
+# ============================================
+# CONFIGURAÇÕES DE ALERTAS AUTOMÁTICOS
+# ============================================
+# ⚠️ ATENÇÃO: Estas configurações agora são usadas APENAS quando um usuário
+# ATIVA o monitoramento através do frontend.
+#
+# Os alertas serão enviados para o EMAIL que o usuário configurar no dashboard,
+# NÃO mais para um email global.
+# ============================================
 alert:
+  # Limite para alertas de COMPRA (queda de preço)
   buy:
-    threshold: -1.0  # ALTERADO: de -5.0 para -1.0 para testar alertas mais facilmente
-  sell:
-    threshold: 1.0   # ALTERADO: de 10.0 para 1.0 para testar alertas mais facilmente
+    threshold: -1.0  # Alerta quando preço cair 1% ou mais
+    # Exemplo: Bitcoin caiu 1.5% → Envia email sugerindo compra
 
-# Configurações de notificação
+  # Limite para alertas de VENDA (alta de preço)
+  sell:
+    threshold: 1.0   # Alerta quando preço subir 1% ou mais
+    # Exemplo: Ethereum subiu 2% → Envia email sugerindo venda
+
+  # NOVO: Intervalo de verificação (em milissegundos)
+  # 300000 = 5 minutos
+  check-interval: 300000
+
+# ============================================
+# CONFIGURAÇÕES DE NOTIFICAÇÃO
+# ============================================
+# ⚠️ IMPORTANTE: A seção 'notification.email.to' foi REMOVIDA
+# porque agora os emails vão para o endereço que cada usuário
+# configurar no dashboard, NÃO para um email fixo global.
+# ============================================
 notification:
   email:
     enabled: true
-    from: ${MAIL_USERNAME:testeprojeto0001@gmail.com}
-    to: ${NOTIFICATION_EMAIL:testeprojeto0001@gmail.com}
+    # Email de ORIGEM (remetente)
+    from: ${MAIL_USERNAME:andremendoncaolv@gmail.com}
+
+    # ❌ REMOVIDO: 'to' global
+    # ANTES: to: ${NOTIFICATION_EMAIL:testeprojeto0001@gmail.com}
+    # AGORA: Cada usuário define seu email no dashboard
+
+    # Configuração de cooldown para evitar spam
+    cooldown-minutes: 30  # Não enviar mesmo alerta 2x em 30 min
 
   telegram:
     enabled: ${TELEGRAM_ENABLED:false}
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     chat-id: ${TELEGRAM_CHAT_ID:}
 
+# ============================================
+# NOVO: CONFIGURAÇÕES DO SISTEMA DE MONITORAMENTO
+# ============================================
+monitoring:
+  # Número máximo de usuários com monitoramento ativo simultâneo
+  max-concurrent-users: 50
+
+  # Tamanho do pool de threads para monitoramento
+  thread-pool-size: 10
+
+  # Timeout para aguardar tasks completarem no shutdown (segundos)
+  shutdown-timeout: 60
+
 # Configuração da API CoinGecko
 coingecko:
   api:
     url: https://api.coingecko.com/api/v3
+  # Limite de requisições por minuto (CoinGecko free tier)
+  rate-limit: 30
 
 # Configuração de logs
 logging:
   level:
     com.crypto: INFO
+    com.crypto.service.MonitoringControlService: DEBUG  # NOVO: Logs do controle de monitoramento
     org.springframework.web: DEBUG
     org.springframework.mail: DEBUG
-    org.flywaydb: DEBUG  # ADICIONADO: logs do Flyway para debug
+    org.flywaydb: DEBUG
+    org.springframework.scheduling: DEBUG  # NOVO: Logs de scheduling
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/crypto-monitor.log
+    # Rotação de logs
+    max-size: 10MB
+    max-history: 7  # Manter logs dos últimos 7 dias
 
 # Configuração do Actuator (monitoramento)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,scheduledtasks  # ADICIONADO: scheduledtasks
       base-path: /actuator
   endpoint:
     health:
       show-details: always
   health:
     mail:
-      enabled: false  # ADICIONADO: desabilita health check de email
+      enabled: false
   info:
     env:
       enabled: true
@@ -123,9 +183,68 @@ management:
 info:
   app:
     name: Crypto Monitor
-    description: Sistema de Monitoramento de Criptomoedas
-    version: 1.0.0
+    description: Sistema de Monitoramento de Criptomoedas com Controle por Usuário
+    version: 2.0.0  # ALTERADO: de 1.0.0 para 2.0.0 (nova versão com controle por usuário)
+    features:
+      - Monitoramento controlado por usuário
+      - Alertas personalizados por email
+      - Sistema anti-spam de notificações
+      - Suporte multi-usuário
   java:
     version: "17.0.16"
   build:
     timestamp: ${TIMESTAMP}
+
+# ============================================
+# DIFERENÇAS ENTRE VERSÃO ANTIGA E NOVA:
+# ============================================
+#
+# VERSÃO ANTIGA (Global):
+# -------------------------
+# - @Scheduled executa automaticamente ao iniciar
+# - Alertas vão para UM email fixo (notification.email.to)
+# - Todos os usuários recebem no mesmo email
+# - Não há controle individual
+#
+# VERSÃO NOVA (Por Usuário):
+# ---------------------------
+# - Scheduling desabilitado globalmente (spring.task.scheduling.enabled: false)
+# - Cada usuário INICIA seu próprio monitoramento via frontend
+# - Alertas vão para o EMAIL que o usuário configurar
+# - Controle individual start/stop por usuário
+# - Suporte multi-usuário (até 50 simultâneos)
+#
+# CONFIGURAÇÕES REMOVIDAS:
+# - notification.email.to (email destino global)
+#
+# CONFIGURAÇÕES ADICIONADAS:
+# - spring.task.scheduling.enabled: false
+# - monitoring.max-concurrent-users
+# - monitoring.thread-pool-size
+# - monitoring.shutdown-timeout
+# - notification.email.cooldown-minutes
+#
+# ============================================
+
+# ============================================
+# EXEMPLO DE USO:
+# ============================================
+#
+# 1. Usuário faz login no sistema
+# 2. Vai para o dashboard
+# 3. Insere seu email: "usuario@exemplo.com"
+# 4. Clica em "Iniciar Monitoramento"
+# 5. Sistema cria scheduler EXCLUSIVO para este usuário
+# 6. A cada 5 minutos:
+#    - Busca preços da CoinGecko
+#    - Verifica alertas configurados por este usuário
+#    - Envia emails APENAS para "usuario@exemplo.com"
+# 7. Usuário pode clicar "Parar Monitoramento" quando quiser
+#
+# MÚLTIPLOS USUÁRIOS:
+# - João monitora com email: joao@gmail.com
+# - Maria monitora com email: maria@hotmail.com
+# - Pedro monitora com email: pedro@outlook.com
+# - Cada um recebe APENAS seus próprios alertas
+# - Schedulers independentes para cada um
+# ============================================
